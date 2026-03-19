@@ -2,7 +2,6 @@ import { createServer } from 'node:http'
 import { FastMCP } from 'fastmcp'
 import { config } from '../shared/config.js'
 import { logger } from '../shared/logger.js'
-import { closeBrowser } from '../features/scraper/browser.service.js'
 import { buildIndex } from '../features/search/search.service.js'
 import { registerSearchTools } from '../features/search/search.tools.js'
 import { registerApiTools } from '../features/api/api.tools.js'
@@ -41,7 +40,7 @@ healthServer.listen(healthPort, () => {
 // Start MCP server
 server.start({
   transportType: 'httpStream',
-  httpStream: { port: config.server.port },
+  httpStream: { host: '0.0.0.0', port: config.server.port },
 })
 
 logger.info('fabric-mcp started', {
@@ -58,7 +57,10 @@ buildIndex().catch((err) => {
 // Graceful shutdown
 const shutdown = async () => {
   logger.info('shutting down')
-  await closeBrowser()
+  if (config.scraper.usePlaywright) {
+    const { closeBrowser } = await import('../features/scraper/browser.service.js')
+    await closeBrowser()
+  }
   healthServer.close()
   process.exit(0)
 }

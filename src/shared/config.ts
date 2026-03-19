@@ -21,6 +21,7 @@ export const config = {
     concurrency: envInt('SCRAPER_CONCURRENCY', 3),
     delayMs: envInt('SCRAPER_DELAY_MS', 250),
     timeoutMs: envInt('SCRAPER_TIMEOUT_MS', 15000),
+    usePlaywright: envStr('USE_PLAYWRIGHT', 'false') === 'true',
   },
   fabricjs: {
     baseUrl: 'https://fabricjs.com',

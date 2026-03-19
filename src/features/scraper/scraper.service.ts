@@ -2,10 +2,18 @@ import { config } from '../../shared/config.js'
 import { logger } from '../../shared/logger.js'
 import type { PageRecord, ScrapeResult, BatchScrapeResult, Section } from '../../shared/types.js'
 import { cacheGet, cacheSet } from '../cache/cache.service.js'
-import { openPage } from './browser.service.js'
-import { fetchStage } from './stages/fetch.stage.js'
+import { fetchStageHttp } from './stages/fetch.stage.js'
 import { extractStage } from './stages/extract.stage.js'
 import { transformStage } from './stages/transform.stage.js'
+import { httpDiscoverUrls } from './http.service.js'
+
+async function fetchPage(url: string) {
+  if (config.scraper.usePlaywright) {
+    const { fetchStage } = await import('./stages/fetch.stage.js')
+    return fetchStage(url)
+  }
+  return fetchStageHttp(url)
+}
 
 export async function scrapePage(url: string, forceRefresh = false): Promise<ScrapeResult> {
   if (!forceRefresh) {
@@ -16,41 +24,49 @@ export async function scrapePage(url: string, forceRefresh = false): Promise<Scr
     }
   }
 
-  const raw = await fetchStage(url)
+  const raw = await fetchPage(url)
   const extracted = extractStage(raw)
   const record = transformStage(extracted)
   await cacheSet(url, record)
   return { record, fromCache: false }
 }
 
+async function discoverPlaywright(
+  indexUrl: string,
+  prefix: string,
+): Promise<string[]> {
+  const { openPage } = await import('./browser.service.js')
+  const page = await openPage(indexUrl)
+  try {
+    const hrefs = await page.$$eval(`nav a[href^="/${prefix}/"]`, (anchors) =>
+      anchors.map((a) => a.getAttribute('href') ?? ''),
+    )
+    const urls: string[] = []
+    for (const href of hrefs) {
+      if (!href) continue
+      const clean = href.split('#')[0]
+      if (clean === `/${prefix}/` || clean === `/${prefix}`) continue
+      const full = `${config.fabricjs.baseUrl}${clean}`
+      urls.push(full.endsWith('/') ? full : full + '/')
+    }
+    return urls
+  } finally {
+    await page.close()
+  }
+}
+
 export async function discoverUrls(section: 'api' | 'docs' | 'all'): Promise<string[]> {
   const urls = new Set<string>()
 
-  const discover = async (indexUrl: string, prefix: string) => {
-    const page = await openPage(indexUrl)
-    try {
-      const hrefs = await page.$$eval(`nav a[href^="/${prefix}/"]`, (anchors) =>
-        anchors.map((a) => a.getAttribute('href') ?? ''),
-      )
-      for (const href of hrefs) {
-        if (!href) continue
-        // Strip anchors
-        const clean = href.split('#')[0]
-        // Skip the index page itself
-        if (clean === `/${prefix}/` || clean === `/${prefix}`) continue
-        const full = `${config.fabricjs.baseUrl}${clean}`
-        urls.add(full.endsWith('/') ? full : full + '/')
-      }
-    } finally {
-      await page.close()
-    }
-  }
+  const discover = config.scraper.usePlaywright
+    ? discoverPlaywright
+    : httpDiscoverUrls
 
   if (section === 'api' || section === 'all') {
-    await discover(config.fabricjs.apiUrl, 'api')
+    for (const u of await discover(config.fabricjs.apiUrl, 'api')) urls.add(u)
   }
   if (section === 'docs' || section === 'all') {
-    await discover(config.fabricjs.docsUrl, 'docs')
+    for (const u of await discover(config.fabricjs.docsUrl, 'docs')) urls.add(u)
   }
 
   const result = [...urls]

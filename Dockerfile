@@ -11,7 +11,35 @@ RUN pnpm install --frozen-lockfile
 COPY src/ src/
 RUN pnpm run build
 
-# Stage 2: Runtime
+# Stage 2a: Lightweight runtime (no Chromium — uses native fetch + JSDOM)
+FROM node:22-bookworm-slim AS runtime-lite
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    wget \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
+
+COPY --from=builder /app/dist/ dist/
+
+VOLUME ["/data/cache"]
+
+ENV NODE_ENV=production \
+    CACHE_DIR=/data/cache \
+    MCP_PORT=3000 \
+    USE_PLAYWRIGHT=false
+
+EXPOSE 3000
+
+CMD ["node", "dist/server/index.js"]
+
+# Stage 2b: Full runtime with Playwright + Chromium
 FROM node:22-bookworm-slim AS runtime
 
 # Install Chromium system dependencies
@@ -67,7 +95,8 @@ VOLUME ["/data/cache"]
 
 ENV NODE_ENV=production \
     CACHE_DIR=/data/cache \
-    MCP_PORT=3000
+    MCP_PORT=3000 \
+    USE_PLAYWRIGHT=true
 
 EXPOSE 3000
 
