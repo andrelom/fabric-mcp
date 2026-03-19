@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const fastmcp = require\\(''fastmcp''\\); console.log\\(Object.keys\\(fastmcp\\)\\)\")",
+      "Bash(npm run:*)"
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+networks:
+  proxy:
+    name: proxy
+
+volumes:
+  mcp-cache:
+    driver: local
+  traefik-logs:
+    driver: local
+
+services:
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --api.insecure=true
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.mcp.address=:3000
+      - --accesslog.filepath=/logs/access.log
+    ports:
+      - '80:80'
+      - '3000:3000'
+      - '8080:8080'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-logs:/logs
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dashboard.rule=Host(`traefik.localhost`)
+      - traefik.http.routers.dashboard.entrypoints=web
+      - traefik.http.services.dashboard.loadbalancer.server.port=8080
+
+  fabric-mcp:
+    build:
+      context: .
+      target: runtime
+    environment:
+      - MCP_PORT=3000
+      - CACHE_DIR=/data/cache
+      - CACHE_TTL_SECONDS=86400
+      - SCRAPER_CONCURRENCY=3
+      - SCRAPER_DELAY_MS=250
+      - SCRAPER_TIMEOUT_MS=15000
+    volumes:
+      - mcp-cache:/data/cache
+    networks:
+      - proxy
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    depends_on:
+      - traefik
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mcp.entrypoints=mcp
+      - traefik.http.routers.mcp.rule=PathPrefix(`/`)
+      - traefik.http.services.mcp.loadbalancer.server.port=3000
+      - traefik.http.middlewares.cors.headers.accesscontrolallowmethods=GET,POST,OPTIONS
+      - traefik.http.middlewares.cors.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.cors.headers.accesscontrolallowheaders=Content-Type,Mcp-Session-Id
+      - traefik.http.middlewares.cors.headers.accesscontrolmaxage=300
+      - traefik.http.routers.mcp.middlewares=cors
