@@ -125,20 +125,20 @@ After starting the server, use the `fabricjs_quickstart` prompt or manually:
 
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Install Chromium for Playwright
-npx playwright install chromium
+pnpm exec playwright install chromium
 
 # Start in watch mode
-npm run dev
+pnpm dev
 
 # Type check
-npm run typecheck
+pnpm typecheck
 
 # Build
-npm run build
+pnpm build
 
 # Start production
-npm start
+pnpm start
 ```

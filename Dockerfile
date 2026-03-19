@@ -1,13 +1,15 @@
 # Stage 1: Builder
 FROM node:22-bookworm-slim AS builder
 
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 WORKDIR /app
 
-COPY package.json tsconfig.json ./
-RUN npm install
+COPY package.json pnpm-lock.yaml tsconfig.json ./
+RUN pnpm install --frozen-lockfile
 
 COPY src/ src/
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Runtime
 FROM node:22-bookworm-slim AS runtime
@@ -52,10 +54,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xdg-utils \
   && rm -rf /var/lib/apt/lists/*
 
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev && npx playwright install chromium
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile && pnpm exec playwright install chromium
 
 COPY --from=builder /app/dist/ dist/
 
