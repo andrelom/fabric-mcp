@@ -10,12 +10,10 @@ export interface Heading {
   id: string
 }
 
-export type Section = 'api' | 'docs'
-
 export interface ExtractedPage {
   url: string
   title: string
-  section: Section
+  section: string
   markdown: string
   headings: Heading[]
   fetchedAt: number
@@ -47,7 +45,7 @@ export interface CacheStatsResult {
 export interface SearchResult {
   url: string
   title: string
-  section: Section
+  section: string
   kind: string
   score: number
   snippet: string
@@ -56,14 +54,14 @@ export interface SearchResult {
 export interface IndexEntry {
   url: string
   title: string
-  section: Section
+  section: string
   kind: string
 }
 
 export interface IndexDoc {
   url: string
   title: string
-  section: Section
+  section: string
   kind: string
   text: string
 }
@@ -89,4 +87,39 @@ export interface BatchScrapeResult {
 export interface IndexStats {
   count: number
   lastBuiltAt: number | null
+}
+
+// --- Service interfaces (core contracts implemented by infrastructure) ---
+
+/**
+ * Filesystem cache scoped to a single provider.
+ */
+export interface ICacheService {
+  get<T>(url: string): Promise<CacheGetResult<T>>
+  set<T>(url: string, data: T, ttlSeconds?: number): Promise<void>
+  delete(url: string): Promise<void>
+  stats(): Promise<CacheStatsResult>
+  purgeAll(): Promise<number>
+  readAll<T>(): Promise<CacheEntry<T>[]>
+}
+
+/**
+ * Scraping pipeline scoped to a single provider.
+ */
+export interface IScraperService {
+  scrapePage(url: string, forceRefresh?: boolean): Promise<ScrapeResult>
+  batchScrape(
+    urls: string[],
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<BatchScrapeResult>
+}
+
+/**
+ * In-memory search index scoped to a single provider.
+ */
+export interface ISearchService {
+  search(query: string, limit?: number, section?: string): Promise<SearchResult[]>
+  listIndex(section?: string): Promise<IndexEntry[]>
+  buildIndex(): Promise<number>
+  getIndexStats(): IndexStats
 }

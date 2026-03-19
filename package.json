@@ -1,7 +1,7 @@
 {
-  "name": "fabric-mcp",
+  "name": "documentation-mcp",
   "version": "1.0.0",
-  "description": "MCP server for Fabric.js documentation — scrapes, caches, and serves fabricjs.com via MCP tools",
+  "description": "Generic, multi-provider MCP server for documentation — scrapes, caches, and serves any documentation site via MCP tools",
   "type": "module",
   "main": "dist/server/index.js",
   "scripts": {

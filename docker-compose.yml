@@ -3,8 +3,6 @@ networks:
     name: proxy
 
 volumes:
-  mcp-cache:
-    driver: local
   traefik-logs:
     driver: local
 
@@ -35,7 +33,7 @@ services:
       - traefik.http.routers.dashboard.entrypoints=web
       - traefik.http.services.dashboard.loadbalancer.server.port=8080
 
-  fabric-mcp:
+  documentation-mcp:
     build:
       context: .
       target: runtime-lite
@@ -50,7 +48,7 @@ services:
     ports:
       - '3000:3000'
     volumes:
-      - mcp-cache:/data/cache
+      - ./docker/fabric-mcp:/data/cache
     networks:
       - proxy
     healthcheck:

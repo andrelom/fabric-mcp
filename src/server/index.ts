@@ -1,32 +1,68 @@
 import { createServer } from 'node:http'
+import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { FastMCP } from 'fastmcp'
-import { config } from '../shared/config.js'
-import { logger } from '../shared/logger.js'
-import { buildIndex } from '../features/search/search.service.js'
-import { registerSearchTools } from '../features/search/search.tools.js'
-import { registerApiTools } from '../features/api/api.tools.js'
-import { registerDocsTools } from '../features/docs/docs.tools.js'
-import { registerPrompts } from './prompts.js'
+import { config } from '../core/config.js'
+import { logger } from '../core/logger.js'
+import { discoverProviders } from '../core/registry.js'
+import { CacheService } from '../infrastructure/cache/cache.service.js'
+import { ScraperService } from '../infrastructure/scraper/scraper.service.js'
+import { SearchService } from '../infrastructure/search/search.service.js'
+import type { ProviderServices } from '../core/provider.js'
 
 const VERSION = '1.0.0'
 
 const server = new FastMCP({
-  name: 'fabric-mcp',
+  name: 'documentation-mcp',
   version: VERSION,
 })
 
-// Register all tools and prompts
-registerApiTools(server)
-registerDocsTools(server)
-registerSearchTools(server)
-registerPrompts(server)
+// --- Provider discovery and registration ---
 
-// Health check sidecar on port + 1
+const providers = await discoverProviders()
+
+if (providers.length === 0) {
+  logger.error('no providers found — server has no tools to register')
+  process.exit(1)
+}
+
+const searchServices: SearchService[] = []
+
+for (const provider of providers) {
+  // Each provider gets its own scoped infrastructure
+  const cacheDir = join(config.cache.dir, provider.id)
+  await mkdir(cacheDir, { recursive: true })
+  const cache = new CacheService(cacheDir, config.cache.ttlSeconds)
+  const scraper = new ScraperService(provider, cache)
+  const search = new SearchService(cache, provider.classifyPage.bind(provider))
+
+  const services: ProviderServices = { cache, scraper, search }
+
+  provider.registerTools(server, services)
+  provider.registerPrompts(server)
+  searchServices.push(search)
+
+  logger.info('registered provider', { id: provider.id, name: provider.name })
+}
+
+logger.info('all providers registered', {
+  providers: providers.map((p) => p.id),
+  count: providers.length,
+})
+
+// --- Health check sidecar on port + 1 ---
+
 const healthPort = config.server.port + 1
 const healthServer = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status: 'ok', version: VERSION }))
+    res.end(
+      JSON.stringify({
+        status: 'ok',
+        version: VERSION,
+        providers: providers.map((p) => p.id),
+      }),
+    )
   } else {
     res.writeHead(404)
     res.end()
@@ -37,28 +73,34 @@ healthServer.listen(healthPort, () => {
   logger.info('health server started', { port: healthPort })
 })
 
-// Start MCP server
+// --- Start MCP server ---
+
 server.start({
   transportType: 'httpStream',
   httpStream: { host: '0.0.0.0', port: config.server.port },
 })
 
-logger.info('fabric-mcp started', {
+logger.info('documentation-mcp started', {
   port: config.server.port,
   healthPort,
   version: VERSION,
+  providers: providers.map((p) => p.id),
 })
 
-// Warm up search index from existing cache (fire-and-forget)
-buildIndex().catch((err) => {
-  logger.warn('initial index build failed', { error: String(err) })
-})
+// --- Warm up search indices from existing cache (fire-and-forget) ---
 
-// Graceful shutdown
+Promise.all(
+  searchServices.map((s) => s.buildIndex().catch((err) => {
+    logger.warn('initial index build failed', { error: String(err) })
+  })),
+)
+
+// --- Graceful shutdown ---
+
 const shutdown = async () => {
   logger.info('shutting down')
   if (config.scraper.usePlaywright) {
-    const { closeBrowser } = await import('../features/scraper/browser.service.js')
+    const { closeBrowser } = await import('../infrastructure/scraper/browser.service.js')
     await closeBrowser()
   }
   healthServer.close()

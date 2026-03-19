@@ -1,7 +1,14 @@
 import { chromium, type Browser, type Page } from 'playwright'
-import { config } from '../../shared/config.js'
-import { logger } from '../../shared/logger.js'
+import { config } from '../../core/config.js'
+import { logger } from '../../core/logger.js'
 
+/**
+ * Shared Playwright Chromium singleton.
+ *
+ * A single browser instance is reused across all providers — it's just
+ * Chrome and can open pages from any domain. The instance auto-reconnects
+ * if the browser process disconnects.
+ */
 let browser: Browser | null = null
 
 export async function getBrowser(): Promise<Browser> {

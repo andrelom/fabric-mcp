@@ -1,7 +1,7 @@
 import { openPage } from '../browser.service.js'
 import { httpFetchPage } from '../http.service.js'
-import { logger } from '../../../shared/logger.js'
-import type { RawPage } from '../../../shared/types.js'
+import { logger } from '../../../core/logger.js'
+import type { RawPage } from '../../../core/types.js'
 
 export async function fetchStage(url: string): Promise<RawPage> {
   const page = await openPage(url)

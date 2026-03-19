@@ -1,3 +1,11 @@
+/**
+ * Application-wide configuration parsed from environment variables.
+ *
+ * Provider-specific settings (URLs, selectors, etc.) live in each
+ * provider's own config file — this module only covers shared
+ * infrastructure: server port, cache defaults, and scraper tuning.
+ */
+
 function envInt(key: string, fallback: number): number {
   const v = process.env[key]
   if (v === undefined) return fallback
@@ -22,10 +30,5 @@ export const config = {
     delayMs: envInt('SCRAPER_DELAY_MS', 250),
     timeoutMs: envInt('SCRAPER_TIMEOUT_MS', 15000),
     usePlaywright: envStr('USE_PLAYWRIGHT', 'false') === 'true',
-  },
-  fabricjs: {
-    baseUrl: 'https://fabricjs.com',
-    docsUrl: 'https://fabricjs.com/docs/',
-    apiUrl: 'https://fabricjs.com/api/',
   },
 } as const

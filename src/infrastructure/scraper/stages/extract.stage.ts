@@ -1,8 +1,8 @@
 import TurndownService from 'turndown'
 import { gfm } from 'turndown-plugin-gfm'
 import { JSDOM } from 'jsdom'
-import { config } from '../../../shared/config.js'
-import type { RawPage, ExtractedPage, Heading, Section } from '../../../shared/types.js'
+import type { ExtractionConfig } from '../../../core/provider.js'
+import type { RawPage, ExtractedPage, Heading } from '../../../core/types.js'
 
 function createTurndown(): TurndownService {
   const td = new TurndownService({
@@ -12,7 +12,7 @@ function createTurndown(): TurndownService {
   })
   td.use(gfm)
 
-  // Remove "Defined in:" lines (TypeDoc noise)
+  // Remove "Defined in:" lines (TypeDoc noise) — harmless for non-TypeDoc sites
   td.addRule('removeDefinedIn', {
     filter: (node) => {
       if (node.nodeName === 'P') {
@@ -27,13 +27,8 @@ function createTurndown(): TurndownService {
   return td
 }
 
-function detectSection(url: string): Section {
-  if (url.includes('/api/')) return 'api'
-  return 'docs'
-}
-
-function makeLinksAbsolute(html: string): string {
-  return html.replace(/href="\/([^"]*?)"/g, `href="${config.fabricjs.baseUrl}/$1"`)
+function makeLinksAbsolute(html: string, baseUrl: string): string {
+  return html.replace(/href="\/([^"]*?)"/g, `href="${baseUrl}/$1"`)
 }
 
 function extractHeadings(markdown: string): Heading[] {
@@ -53,16 +48,23 @@ function extractHeadings(markdown: string): Heading[] {
   return headings
 }
 
-export function extractStage(raw: RawPage): ExtractedPage {
+/**
+ * Converts a raw HTML page into structured Markdown.
+ *
+ * Uses the provider's {@link ExtractionConfig} to determine which DOM
+ * element holds the main content, how to resolve relative links, and
+ * how to classify the page's section.
+ */
+export function extractStage(raw: RawPage, extraction: ExtractionConfig): ExtractedPage {
   const dom = new JSDOM(raw.html)
   const doc = dom.window.document
 
-  // Extract main content
-  const contentEl = doc.querySelector('div.sl-markdown-content')
+  // Extract main content using the provider's CSS selector
+  const contentEl = doc.querySelector(extraction.contentSelector)
   const contentHtml = contentEl ? contentEl.innerHTML : doc.body.innerHTML
 
   // Make relative links absolute
-  const absoluteHtml = makeLinksAbsolute(contentHtml)
+  const absoluteHtml = makeLinksAbsolute(contentHtml, extraction.baseUrl)
 
   // Convert to Markdown
   const td = createTurndown()
@@ -76,8 +78,8 @@ export function extractStage(raw: RawPage): ExtractedPage {
   // Extract headings from markdown
   const headings = extractHeadings(markdown)
 
-  // Detect section
-  const section = detectSection(raw.url)
+  // Detect section via provider callback
+  const section = extraction.detectSection(raw.url)
 
   return {
     url: raw.url,

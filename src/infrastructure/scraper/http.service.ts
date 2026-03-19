@@ -1,13 +1,13 @@
 import { JSDOM } from 'jsdom'
-import { config } from '../../shared/config.js'
-import { logger } from '../../shared/logger.js'
+import { config } from '../../core/config.js'
+import { logger } from '../../core/logger.js'
 
 export async function httpFetchPage(url: string): Promise<string> {
   logger.debug('http fetch', { url })
 
   const res = await fetch(url, {
     headers: {
-      'User-Agent': 'fabric-mcp/1.0 (documentation indexer)',
+      'User-Agent': 'documentation-mcp/1.0 (documentation indexer)',
       Accept: 'text/html',
     },
     signal: AbortSignal.timeout(config.scraper.timeoutMs),
@@ -20,11 +20,25 @@ export async function httpFetchPage(url: string): Promise<string> {
   return res.text()
 }
 
+/**
+ * Discovers URLs from an index page by matching `<nav>` anchor links.
+ *
+ * @param indexUrl - The full URL of the section index page.
+ * @param prefix - The path prefix to filter anchors (e.g. `'api'`).
+ * @param baseUrl - The site's base URL for resolving relative hrefs.
+ */
 export async function httpDiscoverUrls(
   indexUrl: string,
   prefix: string,
+  baseUrl: string,
 ): Promise<string[]> {
-  const html = await httpFetchPage(indexUrl)
+  let html: string
+  try {
+    html = await httpFetchPage(indexUrl)
+  } catch (err) {
+    logger.warn('failed to fetch index page for discovery', { indexUrl, error: String(err) })
+    return []
+  }
   const dom = new JSDOM(html)
   const doc = dom.window.document
 
@@ -38,7 +52,7 @@ export async function httpDiscoverUrls(
     const clean = href.split('#')[0]
     if (clean === `/${prefix}/` || clean === `/${prefix}`) continue
 
-    const full = `${config.fabricjs.baseUrl}${clean}`
+    const full = `${baseUrl}${clean}`
     urls.add(full.endsWith('/') ? full : full + '/')
   }
 

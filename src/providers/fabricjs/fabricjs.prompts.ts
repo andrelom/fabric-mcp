@@ -47,7 +47,7 @@ Follow these steps in order:
 
 Start by calling \`fabricjs_cache_status\` now.`
 
-export function registerPrompts(server: FastMCP): void {
+export function registerFabricJsPrompts(server: FastMCP): void {
   server.addPrompt({
     name: 'fabricjs_assistant',
     description:
